@@ -12,6 +12,8 @@ type Laundry = {
   ratingAvg: number;
   ratingCount: number;
   vipEnabled: boolean;
+  vipFee?: number;
+  isVipCustomer?: boolean;
 };
 
 type Booking = {
@@ -37,14 +39,25 @@ export default function CustomerDashboard() {
     deliveryMen: [],
   });
   const [query, setQuery] = useState("");
+  const [area, setArea] = useState("");
+  const [areas, setAreas] = useState<string[]>([]);
   const [bookingTarget, setBookingTarget] = useState<Laundry | null>(null);
   const [rateBooking, setRateBooking] = useState<Booking | null>(null);
+  const [vipTarget, setVipTarget] = useState<Laundry | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function loadLaundries(q = "") {
-    const res = await fetch(`/api/laundries${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+  async function loadLaundries(q = query, a = area) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (a) params.set("area", a);
+    const res = await fetch(`/api/laundries${params.toString() ? `?${params.toString()}` : ""}`);
     const data = await res.json();
     setLaundries(data.laundries ?? []);
+  }
+  async function loadAreas() {
+    const res = await fetch("/api/laundries/areas");
+    const data = await res.json();
+    setAreas(data.areas ?? []);
   }
   async function loadBookings() {
     const res = await fetch("/api/bookings");
@@ -61,6 +74,7 @@ export default function CustomerDashboard() {
     loadLaundries();
     loadBookings();
     loadFavorites();
+    loadAreas();
   }, []);
 
   async function toggleFavorite(laundryId: string, isFav: boolean) {
@@ -110,18 +124,46 @@ export default function CustomerDashboard() {
 
       {tab === "Browse" && (
         <section className="mt-6">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               className="input max-w-sm"
-              placeholder="Search by area or laundry name…"
+              placeholder="Search by laundry name…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && loadLaundries(query)}
+              onKeyDown={(e) => e.key === "Enter" && loadLaundries(query, area)}
             />
-            <button className="btn-secondary !px-5 !py-2.5" onClick={() => loadLaundries(query)}>
+            <select
+              className="input !w-auto max-w-[220px]"
+              value={area}
+              onChange={(e) => {
+                setArea(e.target.value);
+                loadLaundries(query, e.target.value);
+              }}
+            >
+              <option value="">Nearby: all areas</option>
+              {areas.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+            <button className="btn-secondary !px-5 !py-2.5" onClick={() => loadLaundries(query, area)}>
               Search
             </button>
+            {(query || area) && (
+              <button
+                className="text-xs font-semibold text-ink/50 hover:text-ink"
+                onClick={() => {
+                  setQuery("");
+                  setArea("");
+                  loadLaundries("", "");
+                }}
+              >
+                Clear filters
+              </button>
+            )}
           </div>
+          {area && <p className="mt-2 text-xs text-ink/50">Showing laundries near “{area}”, closest matches first.</p>}
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {laundries.map((l) => (
@@ -148,7 +190,7 @@ export default function CustomerDashboard() {
                   ))}
                   {l.vipEnabled && (
                     <span className="rounded-full bg-citrus-500/15 px-2.5 py-1 text-xs font-semibold text-citrus-600">
-                      VIP
+                      {l.isVipCustomer ? "★ VIP member" : "VIP"}
                     </span>
                   )}
                 </div>
@@ -176,6 +218,15 @@ export default function CustomerDashboard() {
                     {favLaundryIds.has(l._id) ? "★" : "☆"}
                   </button>
                 </div>
+
+                {l.vipEnabled && !l.isVipCustomer && (
+                  <button
+                    className="mt-2 w-full rounded-lg border border-citrus-500/40 bg-citrus-500/10 py-2 text-xs font-semibold text-citrus-700 hover:bg-citrus-500/20"
+                    onClick={() => setVipTarget(l)}
+                  >
+                    Become a VIP member — ৳{l.vipFee ?? 199}
+                  </button>
+                )}
               </div>
             ))}
             {laundries.length === 0 && <p className="text-sm text-ink/50">No laundries found yet.</p>}
@@ -249,6 +300,17 @@ export default function CustomerDashboard() {
           booking={rateBooking}
           onClose={() => setRateBooking(null)}
           onSubmitted={() => setRateBooking(null)}
+        />
+      )}
+
+      {vipTarget && (
+        <VipPaymentModal
+          laundry={vipTarget}
+          onClose={() => setVipTarget(null)}
+          onSuccess={() => {
+            setVipTarget(null);
+            loadLaundries(query, area);
+          }}
         />
       )}
     </main>
@@ -433,6 +495,160 @@ function RateModal({
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button disabled={loading} onClick={submit} className="btn-primary w-full">
           {loading ? "Submitting…" : "Submit rating"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function formatCardNumber(v: string) {
+  const digits = v.replace(/\D/g, "").slice(0, 19);
+  return digits.replace(/(.{4})/g, "$1 ").trim();
+}
+
+function formatExpiry(v: string) {
+  const digits = v.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+}
+
+/**
+ * Mock VIP payment gateway.
+ *
+ * No real merchant account is wired in — that needs its own signup with
+ * a provider (Stripe/SSLCommerz/bKash, etc.) outside what can be set up
+ * automatically. This screen mimics a real card-payment form and talks
+ * to a mock backend endpoint (api/laundry/vip/subscribe) that validates
+ * card shape (Luhn + expiry), "charges" it, and unlocks VIP — good
+ * enough to demo the full flow end-to-end.
+ *
+ * Try CVV "000" to see the decline path.
+ */
+function VipPaymentModal({
+  laundry,
+  onClose,
+  onSuccess,
+}: {
+  laundry: Laundry;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [receipt, setReceipt] = useState<{ transactionId: string; amount: number; cardBrand: string; cardLast4: string } | null>(
+    null
+  );
+
+  async function pay() {
+    setError(null);
+    if (!cardName.trim()) return setError("Enter the name on the card.");
+    if (cardNumber.replace(/\s/g, "").length < 12) return setError("Enter a valid card number.");
+    if (!/^\d{2}\/\d{2}$/.test(expiry)) return setError("Enter expiry as MM/YY.");
+    if (!/^\d{3,4}$/.test(cvv)) return setError("Enter a valid CVV.");
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/laundry/vip/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          laundryId: laundry._id,
+          cardNumber: cardNumber.replace(/\s/g, ""),
+          cardName,
+          expiry,
+          cvv,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Payment failed");
+      setReceipt(data.payment);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (receipt) {
+    return (
+      <Modal title="Payment successful" onClose={onSuccess}>
+        <div className="space-y-3 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-2xl text-teal-700">
+            ✓
+          </div>
+          <p className="text-sm text-ink/70">
+            You're now a VIP member at <b>{laundry.laundryName}</b>.
+          </p>
+          <div className="rounded-lg bg-suds p-3 text-left text-xs text-ink/60">
+            <p>Transaction: {receipt.transactionId}</p>
+            <p>
+              Paid: ৳{receipt.amount} · {receipt.cardBrand} •••• {receipt.cardLast4}
+            </p>
+          </div>
+          <button className="btn-primary w-full" onClick={onSuccess}>
+            Done
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal title={`VIP membership — ${laundry.laundryName}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="rounded-lg bg-suds p-3 text-sm text-ink/70">
+          One-time payment of <b>৳{laundry.vipFee ?? 199}</b> unlocks priority service at this laundry.
+        </div>
+
+        <p className="text-[11px] text-ink/40">
+          Demo payment screen — no real card is charged. Any Luhn-valid card number works; use CVV “000” to test a
+          decline.
+        </p>
+
+        <div>
+          <label className="label">Card number</label>
+          <input
+            className="input"
+            placeholder="4242 4242 4242 4242"
+            value={cardNumber}
+            onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
+            inputMode="numeric"
+          />
+        </div>
+        <div>
+          <label className="label">Name on card</label>
+          <input className="input" value={cardName} onChange={(e) => setCardName(e.target.value)} />
+        </div>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="label">Expiry</label>
+            <input
+              className="input"
+              placeholder="MM/YY"
+              value={expiry}
+              onChange={(e) => setExpiry(formatExpiry(e.target.value))}
+              inputMode="numeric"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="label">CVV</label>
+            <input
+              className="input"
+              placeholder="123"
+              value={cvv}
+              onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              inputMode="numeric"
+            />
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <button disabled={loading} onClick={pay} className="btn-primary w-full">
+          {loading ? "Processing payment…" : `Pay ৳${laundry.vipFee ?? 199}`}
         </button>
       </div>
     </Modal>

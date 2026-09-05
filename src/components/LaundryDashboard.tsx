@@ -31,11 +31,22 @@ export default function LaundryDashboard() {
   const [openJobs, setOpenJobs] = useState<Booking[]>([]);
   const [deliveryMen, setDeliveryMen] = useState<DeliveryMan[]>([]);
   const [vipEnabled, setVipEnabled] = useState(false);
+  const [vipFee, setVipFee] = useState(199);
+  const [vipCustomerCount, setVipCustomerCount] = useState(0);
+  const [vipSaving, setVipSaving] = useState(false);
+  const [vipSaved, setVipSaved] = useState(false);
 
   async function loadAvailability() {
     const res = await fetch("/api/laundry/availability");
     const data = await res.json();
     setIsOnline(data.isOnline ?? false);
+  }
+  async function loadVipSettings() {
+    const res = await fetch("/api/laundry/vip");
+    const data = await res.json();
+    setVipEnabled(data.vipEnabled ?? false);
+    setVipFee(data.vipFee ?? 199);
+    setVipCustomerCount(data.vipCustomerCount ?? 0);
   }
   async function loadBookings() {
     const res = await fetch("/api/bookings");
@@ -53,7 +64,27 @@ export default function LaundryDashboard() {
     loadAvailability();
     loadBookings();
     loadJobFeed();
+    loadVipSettings();
   }, []);
+
+  async function saveVipSettings(next: { vipEnabled?: boolean; vipFee?: number }) {
+    setVipSaving(true);
+    setVipSaved(false);
+    try {
+      const res = await fetch("/api/laundry/vip", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      const data = await res.json();
+      setVipEnabled(data.vipEnabled ?? false);
+      setVipFee(data.vipFee ?? 199);
+      setVipCustomerCount(data.vipCustomerCount ?? 0);
+      setVipSaved(true);
+    } finally {
+      setVipSaving(false);
+    }
+  }
 
   async function toggleAvailability() {
     const next = !isOnline;
@@ -230,17 +261,45 @@ export default function LaundryDashboard() {
           <div className="card">
             <h2 className="font-display text-lg font-bold text-ink">VIP membership</h2>
             <p className="mt-1 text-sm text-ink/60">
-              Activate VIP status to offer a limited set of customers faster service.
+              Customers can pay a one-time fee through the payment screen to become a VIP member and get priority
+              service on their orders.
             </p>
             <label className="mt-4 flex items-center gap-3">
               <input
                 type="checkbox"
                 checked={vipEnabled}
-                onChange={(e) => setVipEnabled(e.target.checked)}
+                onChange={(e) => saveVipSettings({ vipEnabled: e.target.checked })}
                 className="h-4 w-4"
               />
               <span className="text-sm text-ink/70">Enable VIP membership program</span>
             </label>
+
+            <div className="mt-4">
+              <label className="label">Membership fee (BDT)</label>
+              <div className="flex gap-2">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  value={vipFee}
+                  onChange={(e) => setVipFee(Number(e.target.value))}
+                  onBlur={() => saveVipSettings({ vipFee })}
+                  disabled={!vipEnabled}
+                />
+                <button
+                  className="btn-secondary !px-4 text-xs disabled:opacity-40"
+                  disabled={!vipEnabled || vipSaving}
+                  onClick={() => saveVipSettings({ vipFee })}
+                >
+                  {vipSaving ? "Saving…" : "Save"}
+                </button>
+              </div>
+              {vipSaved && !vipSaving && <p className="mt-1 text-xs text-teal-700">Saved.</p>}
+            </div>
+
+            <p className="mt-4 text-xs text-ink/50">
+              {vipCustomerCount} customer{vipCustomerCount === 1 ? "" : "s"} currently VIP at your center.
+            </p>
           </div>
         </section>
       )}

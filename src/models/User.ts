@@ -23,6 +23,7 @@ const UserSchema = new Schema(
     servicesOffered: [{ type: String }], // e.g. ["Washing", "Ironing"]
     vipEnabled: { type: Boolean, default: false },
     vipCustomerIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    vipFee: { type: Number, default: 199 }, // BDT, one-time mock membership fee set by the laundry
 
     // --- Delivery-only fields ---
     verified: { type: Boolean, default: false }, // verified delivery-man
