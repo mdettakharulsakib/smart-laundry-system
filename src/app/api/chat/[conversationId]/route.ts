@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/auth";
 async function assertParticipant(conversationId: string, userId: string) {
   const convo = await Conversation.findById(conversationId);
   if (!convo) return null;
-  const isParticipant = convo.participants.some((p) => p.toString() === userId);
+  const isParticipant = convo.participants.some((p: any) => p.toString() === userId);
   return isParticipant ? convo : null;
 }
 
