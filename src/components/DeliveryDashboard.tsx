@@ -22,18 +22,23 @@ type Laundry = {
   ratingCount: number;
 };
 
-// The delivery-man's own actionable steps. "ready" is set by the laundry
-// (once washing is done), so there's no button for it here — the
-// delivery-man just waits during "in_progress" until the laundry marks
-// the order ready, then picks up the "delivered" action from there.
+// The delivery-man's own actionable steps. "assigned" is handled with its
+// own Accept/Decline buttons below, not this simple one-button map. "ready"
+// is set by the laundry (once washing is done), so there's no button for
+// it here — the delivery-man just waits during "in_progress" until the
+// laundry marks the order ready, then picks up the "delivered" action
+// from there.
 const NEXT_STATUS: Record<string, string | null> = {
-  accepted: "picked_up",
   picked_up: "in_progress",
   in_progress: null,
   ready: "delivered",
 };
 
-const TABS = ["Available Laundry Shops", "Job Feed"] as const;
+// Terminal states — an order that reaches any of these is done and moves
+// out of "Job Feed" into "History".
+const TERMINAL_STATUS = ["received", "cancelled", "rejected"];
+
+const TABS = ["Available Laundry Shops", "Job Feed", "History"] as const;
 
 /**
  * Delivery-man dashboard.
@@ -193,9 +198,67 @@ export default function DeliveryDashboard() {
 
       {tab === "Job Feed" && (
         <section className="mt-6 space-y-3">
-          {bookings.map((b) => {
-            const next = NEXT_STATUS[b.status];
-            return (
+          {bookings
+            .filter((b) => !TERMINAL_STATUS.includes(b.status))
+            .map((b) => {
+              const next = NEXT_STATUS[b.status];
+              return (
+                <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-display font-bold text-ink">#{b.orderSerial}</p>
+                    <p className="text-sm text-ink/60">
+                      Pickup: {b.pickupAddress} · From: {b.laundryId?.laundryName || b.laundryId?.name}
+                    </p>
+                    <p className="text-xs text-ink/45">
+                      Customer: {b.customerId?.name} · {b.customerId?.phone}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-suds px-2.5 py-1 text-[11px] font-semibold capitalize text-ink/70">
+                      {b.status.replace("_", " ")}
+                    </span>
+                    {b.status === "assigned" && (
+                      <>
+                        <button
+                          className="btn-primary !px-3 !py-1.5 text-xs"
+                          onClick={() => advance(b._id, "picked_up")}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          className="btn-secondary !px-3 !py-1.5 text-xs"
+                          onClick={() => advance(b._id, "accepted")}
+                        >
+                          Decline
+                        </button>
+                      </>
+                    )}
+                    {next && (
+                      <button className="btn-primary !px-3 !py-1.5 text-xs" onClick={() => advance(b._id, next)}>
+                        Mark {next.replace("_", " ")}
+                      </button>
+                    )}
+                    {b.status === "in_progress" && (
+                      <span className="text-xs text-ink/45">Waiting for laundry to finish washing</span>
+                    )}
+                    {b.status === "delivered" && (
+                      <span className="text-xs text-ink/45">Delivered — waiting for customer to confirm</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          {bookings.filter((b) => !TERMINAL_STATUS.includes(b.status)).length === 0 && (
+            <p className="text-sm text-ink/50">No deliveries assigned yet.</p>
+          )}
+        </section>
+      )}
+
+      {tab === "History" && (
+        <section className="mt-6 space-y-3">
+          {bookings
+            .filter((b) => TERMINAL_STATUS.includes(b.status))
+            .map((b) => (
               <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="font-display font-bold text-ink">#{b.orderSerial}</p>
@@ -206,26 +269,18 @@ export default function DeliveryDashboard() {
                     Customer: {b.customerId?.name} · {b.customerId?.phone}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-suds px-2.5 py-1 text-[11px] font-semibold capitalize text-ink/70">
-                    {b.status.replace("_", " ")}
-                  </span>
-                  {next && (
-                    <button className="btn-primary !px-3 !py-1.5 text-xs" onClick={() => advance(b._id, next)}>
-                      Mark {next.replace("_", " ")}
-                    </button>
-                  )}
-                  {b.status === "in_progress" && (
-                    <span className="text-xs text-ink/45">Waiting for laundry to finish washing</span>
-                  )}
-                  {b.status === "delivered" && (
-                    <span className="text-xs text-ink/45">Delivered — waiting for customer to confirm</span>
-                  )}
-                </div>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${
+                    b.status === "received" ? "bg-teal-100 text-teal-700" : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {b.status}
+                </span>
               </div>
-            );
-          })}
-          {bookings.length === 0 && <p className="text-sm text-ink/50">No deliveries assigned yet.</p>}
+            ))}
+          {bookings.filter((b) => TERMINAL_STATUS.includes(b.status)).length === 0 && (
+            <p className="text-sm text-ink/50">No completed or cancelled deliveries yet.</p>
+          )}
         </section>
       )}
     </main>

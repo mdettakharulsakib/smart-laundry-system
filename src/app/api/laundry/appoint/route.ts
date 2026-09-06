@@ -37,20 +37,29 @@ export async function POST(req: NextRequest) {
   deliveryMan.assignedLaundryId = session.userId as any;
   await deliveryMan.save();
 
-  // 2. Optional: assign to a specific job from the job feed
+  // 2. Optional: assign to a specific job from the job feed.
+  // Moves the booking to "assigned" — offered to the delivery-man but not
+  // yet accepted by them. The delivery-man must explicitly accept (or
+  // decline, which unassigns and drops it back to "accepted" for the
+  // laundry to re-offer) before it can move on to "picked_up".
   let booking = null;
   if (bookingId) {
     booking = await Booking.findOneAndUpdate(
-      { _id: bookingId, laundryId: session.userId },
-      { deliveryManId },
+      { _id: bookingId, laundryId: session.userId, status: "accepted", deliveryManId: null },
+      { deliveryManId, status: "assigned" },
       { new: true }
     ).populate("customerId", "name email");
 
-    if (booking) {
-      const customer = booking.customerId as any;
-      const t = templates.bookingStatus(customer.name, booking.orderSerial, "Delivery-man assigned");
-      void sendMail(customer.email, t.subject, t.html);
+    if (!booking) {
+      return NextResponse.json(
+        { error: "This job is no longer open (it may already be assigned)." },
+        { status: 409 }
+      );
     }
+
+    const customer = booking.customerId as any;
+    const t = templates.bookingStatus(customer.name, booking.orderSerial, "Delivery-man assigned — awaiting their acceptance");
+    void sendMail(customer.email, t.subject, t.html);
   }
 
   return NextResponse.json({ deliveryMan, booking });

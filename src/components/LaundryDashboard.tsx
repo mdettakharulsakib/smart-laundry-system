@@ -189,21 +189,24 @@ export default function LaundryDashboard() {
                       </button>
                     </>
                   )}
-                  {["accepted", "picked_up", "in_progress"].includes(b.status) && (
-                    <>
-                      <button
-                        className="btn-secondary !px-3 !py-1.5 text-xs"
-                        onClick={() => updateStatus(b._id, "cancelled")}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="btn-primary !px-3 !py-1.5 text-xs"
-                        onClick={() => updateStatus(b._id, "ready")}
-                      >
-                        Mark ready
-                      </button>
-                    </>
+                  {["accepted", "assigned", "picked_up", "in_progress"].includes(b.status) && (
+                    <button
+                      className="btn-secondary !px-3 !py-1.5 text-xs"
+                      onClick={() => updateStatus(b._id, "cancelled")}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  {b.status === "in_progress" && (
+                    <button
+                      className="btn-primary !px-3 !py-1.5 text-xs"
+                      onClick={() => updateStatus(b._id, "ready")}
+                    >
+                      Mark ready
+                    </button>
+                  )}
+                  {b.status === "assigned" && (
+                    <span className="text-xs text-ink/45">Waiting for delivery-man to accept</span>
                   )}
                   {b.status === "ready" && (
                     <span className="text-xs text-ink/45">Ready — waiting for delivery-man to deliver</span>

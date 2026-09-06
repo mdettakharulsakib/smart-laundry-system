@@ -6,6 +6,7 @@ import { sendMail, templates } from "@/lib/mailer";
 
 const ALLOWED_STATUS = [
   "accepted",
+  "assigned",
   "rejected",
   "picked_up",
   "in_progress",
@@ -19,14 +20,23 @@ const ALLOWED_STATUS = [
 // marking their own booking "delivered", or a delivery-man "accepting"
 // a booking that isn't theirs to approve.
 //
-// Full lifecycle: pending -> accepted (laundry) -> picked_up (delivery,
-// collects dirty laundry) -> in_progress (delivery drops at laundry /
-// wash underway) -> ready (laundry finishes washing) -> delivered
-// (delivery-man drops the order back at the customer) -> received
-// (customer confirms they actually got it — this is what unlocks rating).
+// Full lifecycle: pending -> accepted (laundry approves) -> assigned
+// (laundry appoints a delivery-man from the job feed, via /api/laundry/appoint)
+// -> picked_up (delivery-man ACCEPTS the assignment and collects the dirty
+// laundry — "accepted" is expressed as the jump straight to picked_up,
+// since accepting and starting the job is one action) -> in_progress
+// (dropped at the laundry / wash underway) -> ready (laundry finishes
+// washing) -> delivered (delivery-man drops the order back at the
+// customer) -> received (customer confirms they actually got it — this
+// is what unlocks rating, and what moves the order into everyone's
+// History tab).
+//
+// A delivery-man can also DECLINE an "assigned" job — that's expressed as
+// setting status back to "accepted" (see the decline handling below,
+// which also clears deliveryManId so the laundry can re-offer it).
 const ROLE_ALLOWED_STATUS: Record<"laundry" | "delivery" | "customer", string[]> = {
   laundry: ["accepted", "rejected", "cancelled", "ready"],
-  delivery: ["picked_up", "in_progress", "delivered"],
+  delivery: ["picked_up", "in_progress", "delivered", "accepted"],
   customer: ["cancelled", "received"],
 };
 
@@ -37,7 +47,8 @@ const ROLE_ALLOWED_STATUS: Record<"laundry" | "delivery" | "customer", string[]>
 // cancelling an order that's already been delivered.
 const VALID_TRANSITIONS: Record<string, string[]> = {
   pending: ["accepted", "rejected", "cancelled"],
-  accepted: ["picked_up", "cancelled"],
+  accepted: ["cancelled"], // moving to "assigned" happens via /api/laundry/appoint, not here
+  assigned: ["picked_up", "accepted", "cancelled"], // accept / decline / laundry cancels
   picked_up: ["in_progress", "cancelled"],
   in_progress: ["ready", "cancelled"],
   ready: ["delivered", "cancelled"],
@@ -92,6 +103,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         { error: `Cannot change status from "${booking.status}" to "${body.status}"` },
         { status: 400 }
       );
+    }
+    // A delivery-man declining an offered job is expressed as sending an
+    // "assigned" booking back to "accepted" — unassign them so the laundry
+    // sees it as an open job again instead of silently keeping the
+    // delivery-man attached to a job they turned down.
+    if (session.role === "delivery" && body.status === "accepted") {
+      booking.deliveryManId = null;
     }
     booking.status = body.status;
   }

@@ -374,6 +374,7 @@ function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: "bg-yellow-100 text-yellow-700",
     accepted: "bg-teal-100 text-teal-700",
+    assigned: "bg-blue-100 text-blue-700",
     rejected: "bg-red-100 text-red-700",
     picked_up: "bg-blue-100 text-blue-700",
     in_progress: "bg-blue-100 text-blue-700",

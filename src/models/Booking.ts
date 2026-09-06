@@ -20,6 +20,7 @@ const BookingSchema = new Schema(
       enum: [
         "pending",
         "accepted",
+        "assigned",
         "rejected",
         "picked_up",
         "in_progress",

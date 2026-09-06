@@ -30,11 +30,17 @@ export async function GET() {
     .sort({ createdAt: 1 })
     .lean();
 
+  // There's no admin-verification screen in this app, so every delivery
+  // account is usable as soon as it registers (see auth/register). Filtering
+  // on `verified` here would silently hide every delivery-man that signed
+  // up before that flag existed on their account, which is exactly the bug
+  // this caused: the laundry job feed showing an empty roster. Show the
+  // whole pool of delivery accounts instead.
   const availableDeliveryMen = await User.find({
     role: "delivery",
-    verified: true,
   })
     .select("name phone location isOnline ratingAvg ratingCount assignedLaundryId")
+    .sort({ isOnline: -1, name: 1 })
     .lean();
 
   return NextResponse.json({ openJobs, availableDeliveryMen });
