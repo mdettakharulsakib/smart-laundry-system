@@ -114,11 +114,23 @@ export default function LaundryDashboard() {
   }
 
   async function appointDeliveryMan(deliveryManId: string, bookingId: string) {
-    await fetch("/api/laundry/appoint", {
+    const res = await fetch("/api/laundry/appoint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ deliveryManId, bookingId }),
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      // Surface the real reason instead of failing silently — e.g. someone
+      // else already grabbed this job, or it's no longer open.
+      alert(data.error || "Could not appoint this delivery-man. Please refresh and try again.");
+      loadJobFeed();
+      loadBookings();
+      return;
+    }
+    if (bookingId) {
+      alert("Delivery-man assigned — waiting for them to accept the job.");
+    }
     loadJobFeed();
     loadBookings();
   }
@@ -310,12 +322,23 @@ export default function LaundryDashboard() {
                       </td>
                       <td className="px-4 py-2.5 text-ink/60">★ {d.ratingAvg?.toFixed(1) ?? "0.0"}</td>
                       <td className="px-4 py-2.5 text-right">
-                        <button
-                          className="btn-secondary !px-3 !py-1.5 text-xs"
-                          onClick={() => appointDeliveryMan(d._id, "")}
-                        >
-                          Appoint
-                        </button>
+                        {openJobs.length > 0 ? (
+                          <button
+                            className="btn-primary !px-3 !py-1.5 text-xs"
+                            onClick={() => appointDeliveryMan(d._id, openJobs[0]._id)}
+                            title={`Assign to order #${openJobs[0].orderSerial}`}
+                          >
+                            Appoint to #{openJobs[0].orderSerial}
+                          </button>
+                        ) : (
+                          <button
+                            className="btn-secondary !px-3 !py-1.5 text-xs"
+                            onClick={() => appointDeliveryMan(d._id, "")}
+                            title="No open orders right now — this only adds them to your center's roster"
+                          >
+                            Add to roster
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
