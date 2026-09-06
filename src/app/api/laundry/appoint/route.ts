@@ -60,6 +60,11 @@ export async function POST(req: NextRequest) {
     const customer = booking.customerId as any;
     const t = templates.bookingStatus(customer.name, booking.orderSerial, "Delivery-man assigned — awaiting their acceptance");
     void sendMail(customer.email, t.subject, t.html);
+
+    // The delivery-man is the one who actually needs to act here — tell
+    // them directly, since nothing else in the UI pings them in real time.
+    const jobOfferMail = templates.deliveryJobOffered(deliveryMan.name, booking.orderSerial);
+    void sendMail(deliveryMan.email, jobOfferMail.subject, jobOfferMail.html);
   }
 
   return NextResponse.json({ deliveryMan, booking });

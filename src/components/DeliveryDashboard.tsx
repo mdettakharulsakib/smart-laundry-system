@@ -55,6 +55,9 @@ export default function DeliveryDashboard() {
   const [query, setQuery] = useState("");
   const [area, setArea] = useState("");
   const [areas, setAreas] = useState<string[]>([]);
+  const [hasAutoJumped, setHasAutoJumped] = useState(false);
+
+  const pendingAssignments = bookings.filter((b) => b.status === "assigned");
 
   async function loadAvailability() {
     const res = await fetch("/api/delivery/availability");
@@ -74,7 +77,17 @@ export default function DeliveryDashboard() {
   async function loadBookings() {
     const res = await fetch("/api/bookings");
     const data = await res.json();
-    setBookings(data.bookings ?? []);
+    const list: Booking[] = data.bookings ?? [];
+    setBookings(list);
+    // First load only: if there's already a job waiting for a decision,
+    // jump straight to Job Feed instead of leaving the delivery-man to
+    // stumble onto it — this is the whole reason "accept" felt hidden.
+    setHasAutoJumped((already) => {
+      if (!already && list.some((b) => b.status === "assigned")) {
+        setTab("Job Feed");
+      }
+      return true;
+    });
   }
   async function advance(bookingId: string, status: string) {
     await fetch(`/api/bookings/${bookingId}`, {
@@ -130,14 +143,31 @@ export default function DeliveryDashboard() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+            className={`relative flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
               tab === t ? "border-teal-600 text-teal-700" : "border-transparent text-ink/50 hover:text-ink"
             }`}
           >
             {t}
+            {t === "Job Feed" && pendingAssignments.length > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
+                {pendingAssignments.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
+
+      {pendingAssignments.length > 0 && tab !== "Job Feed" && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-teal-600/30 bg-teal-50 px-4 py-3">
+          <p className="text-sm font-semibold text-teal-800">
+            You have {pendingAssignments.length} new job{pendingAssignments.length === 1 ? "" : "s"} waiting for your
+            response.
+          </p>
+          <button className="btn-primary !px-4 !py-1.5 text-xs" onClick={() => setTab("Job Feed")}>
+            Review now
+          </button>
+        </div>
+      )}
 
       {tab === "Available Laundry Shops" && (
         <section className="mt-6">
@@ -202,9 +232,20 @@ export default function DeliveryDashboard() {
             .filter((b) => !TERMINAL_STATUS.includes(b.status))
             .map((b) => {
               const next = NEXT_STATUS[b.status];
+              const isPending = b.status === "assigned";
               return (
-                <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
+                <div
+                  key={b._id}
+                  className={`card flex flex-wrap items-center justify-between gap-3 ${
+                    isPending ? "border-2 border-teal-500 bg-teal-50/50" : ""
+                  }`}
+                >
                   <div>
+                    {isPending && (
+                      <p className="mb-1 text-xs font-bold uppercase tracking-wide text-teal-700">
+                        New job offer — action needed
+                      </p>
+                    )}
                     <p className="font-display font-bold text-ink">#{b.orderSerial}</p>
                     <p className="text-sm text-ink/60">
                       Pickup: {b.pickupAddress} · From: {b.laundryId?.laundryName || b.laundryId?.name}
@@ -214,16 +255,18 @@ export default function DeliveryDashboard() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-suds px-2.5 py-1 text-[11px] font-semibold capitalize text-ink/70">
-                      {b.status.replace("_", " ")}
-                    </span>
+                    {!isPending && (
+                      <span className="rounded-full bg-suds px-2.5 py-1 text-[11px] font-semibold capitalize text-ink/70">
+                        {b.status.replace("_", " ")}
+                      </span>
+                    )}
                     {b.status === "assigned" && (
                       <>
                         <button
                           className="btn-primary !px-3 !py-1.5 text-xs"
                           onClick={() => advance(b._id, "picked_up")}
                         >
-                          Accept
+                          Accept job
                         </button>
                         <button
                           className="btn-secondary !px-3 !py-1.5 text-xs"

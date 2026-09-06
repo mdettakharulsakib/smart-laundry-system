@@ -61,4 +61,8 @@ export const templates = {
     subject: `Order #${orderId} — ${status}`,
     html: `<p>Hi ${name},</p><p>Your order #${orderId} status has been updated to: <b>${status}</b>.</p>`,
   }),
+  deliveryJobOffered: (name: string, orderId: string) => ({
+    subject: `New delivery job — Order #${orderId}`,
+    html: `<p>Hi ${name},</p><p>A laundry center has offered you order #${orderId}. Log in to your dashboard's "Job Feed" tab to accept or decline it.</p>`,
+  }),
 };
