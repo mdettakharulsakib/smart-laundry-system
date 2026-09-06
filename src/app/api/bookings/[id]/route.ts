@@ -11,16 +11,23 @@ const ALLOWED_STATUS = [
   "in_progress",
   "ready",
   "delivered",
+  "received",
   "cancelled",
 ];
 
 // Which statuses each role is allowed to set. Prevents e.g. a customer
 // marking their own booking "delivered", or a delivery-man "accepting"
 // a booking that isn't theirs to approve.
+//
+// Full lifecycle: pending -> accepted (laundry) -> picked_up (delivery,
+// collects dirty laundry) -> in_progress (delivery drops at laundry /
+// wash underway) -> ready (laundry finishes washing) -> delivered
+// (delivery-man drops the order back at the customer) -> received
+// (customer confirms they actually got it — this is what unlocks rating).
 const ROLE_ALLOWED_STATUS: Record<"laundry" | "delivery" | "customer", string[]> = {
-  laundry: ["accepted", "rejected", "cancelled"],
-  delivery: ["picked_up", "in_progress", "ready", "delivered"],
-  customer: ["cancelled"],
+  laundry: ["accepted", "rejected", "cancelled", "ready"],
+  delivery: ["picked_up", "in_progress", "delivered"],
+  customer: ["cancelled", "received"],
 };
 
 /**
@@ -55,6 +62,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json(
         { error: `${session.role} accounts cannot set status to "${body.status}"` },
         { status: 403 }
+      );
+    }
+    // Customer can only confirm receipt once the delivery-man has actually
+    // marked the order delivered — prevents skipping straight to "received".
+    if (body.status === "received" && booking.status !== "delivered") {
+      return NextResponse.json(
+        { error: "You can only confirm receipt after the order has been delivered" },
+        { status: 400 }
       );
     }
     booking.status = body.status;

@@ -33,15 +33,17 @@ export async function POST(req: NextRequest) {
 
   await dbConnect();
 
-  // Only allow rating for a booking the customer actually owns and that's completed
+  // Only allow rating for a booking the customer actually owns and has
+  // confirmed receipt of (status "received" — set by the customer
+  // themselves once the order is actually in hand).
   const booking = await Booking.findOne({
     _id: data.bookingId,
     customerId: session.userId,
-    status: "delivered",
+    status: "received",
   });
   if (!booking) {
     return NextResponse.json(
-      { error: "Booking not found, not yours, or not yet delivered" },
+      { error: "Booking not found, not yours, or receipt not confirmed yet" },
       { status: 404 }
     );
   }

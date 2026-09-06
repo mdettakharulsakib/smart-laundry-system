@@ -22,7 +22,11 @@ type DeliveryMan = {
   isOnline: boolean;
 };
 
-const TABS = ["Incoming Bookings", "Job Feed", "Settings"] as const;
+const TABS = ["Incoming Bookings", "Job Feed", "History", "Settings"] as const;
+
+// Terminal states — an order that reaches any of these is done and moves
+// out of "Incoming Bookings" into "History".
+const TERMINAL_STATUS = ["received", "cancelled", "rejected"];
 
 export default function LaundryDashboard() {
   const router = useRouter();
@@ -154,66 +158,101 @@ export default function LaundryDashboard() {
 
       {tab === "Incoming Bookings" && (
         <section className="mt-6 space-y-3">
-          {bookings.map((b) => (
-            <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-display font-bold text-ink">
-                  #{b.orderSerial} · {b.customerId.name}
-                </p>
-                <p className="text-sm text-ink/60">
-                  {b.services.join(", ")} → {b.pickupAddress}
-                </p>
-                {b.deliveryManId && <p className="text-xs text-ink/45">Delivery-man: {b.deliveryManId.name}</p>}
-              </div>
+          {bookings
+            .filter((b) => !TERMINAL_STATUS.includes(b.status))
+            .map((b) => (
+              <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-display font-bold text-ink">
+                    #{b.orderSerial} · {b.customerId.name}
+                  </p>
+                  <p className="text-sm text-ink/60">
+                    {b.services.join(", ")} → {b.pickupAddress}
+                  </p>
+                  {b.deliveryManId && <p className="text-xs text-ink/45">Delivery-man: {b.deliveryManId.name}</p>}
+                </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-suds px-2.5 py-1 text-[11px] font-semibold capitalize text-ink/70">
-                  {b.status.replace("_", " ")}
-                </span>
-                {b.status === "pending" && (
-                  <>
-                    <button className="btn-primary !px-3 !py-1.5 text-xs" onClick={() => updateStatus(b._id, "accepted")}>
-                      Approve
-                    </button>
-                    <button
-                      className="btn-secondary !px-3 !py-1.5 text-xs"
-                      onClick={() => updateStatus(b._id, "rejected")}
-                    >
-                      Reject
-                    </button>
-                  </>
-                )}
-                {["accepted", "picked_up", "in_progress"].includes(b.status) && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-suds px-2.5 py-1 text-[11px] font-semibold capitalize text-ink/70">
+                    {b.status.replace("_", " ")}
+                  </span>
+                  {b.status === "pending" && (
+                    <>
+                      <button className="btn-primary !px-3 !py-1.5 text-xs" onClick={() => updateStatus(b._id, "accepted")}>
+                        Approve
+                      </button>
+                      <button
+                        className="btn-secondary !px-3 !py-1.5 text-xs"
+                        onClick={() => updateStatus(b._id, "rejected")}
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+                  {["accepted", "picked_up", "in_progress"].includes(b.status) && (
+                    <>
+                      <button
+                        className="btn-secondary !px-3 !py-1.5 text-xs"
+                        onClick={() => updateStatus(b._id, "cancelled")}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="btn-primary !px-3 !py-1.5 text-xs"
+                        onClick={() => updateStatus(b._id, "ready")}
+                      >
+                        Mark ready
+                      </button>
+                    </>
+                  )}
+                  {b.status === "ready" && (
+                    <span className="text-xs text-ink/45">Ready — waiting for delivery-man to deliver</span>
+                  )}
+                  {b.status === "delivered" && (
+                    <span className="text-xs text-ink/45">Delivered — waiting for customer to confirm receipt</span>
+                  )}
                   <button
-                    className="btn-secondary !px-3 !py-1.5 text-xs"
-                    onClick={() => updateStatus(b._id, "cancelled")}
+                    className="text-xs font-semibold text-teal-700"
+                    onClick={() => router.push(`/chat?withUser=${b.customerId._id}`)}
                   >
-                    Cancel
+                    Chat
                   </button>
-                )}
-                {b.status === "accepted" && (
-                  <button className="btn-secondary !px-3 !py-1.5 text-xs" onClick={() => updateStatus(b._id, "ready")}>
-                    Mark ready
-                  </button>
-                )}
-                {b.status === "ready" && (
-                  <button
-                    className="btn-primary !px-3 !py-1.5 text-xs"
-                    onClick={() => updateStatus(b._id, "delivered")}
-                  >
-                    Mark delivered
-                  </button>
-                )}
-                <button
-                  className="text-xs font-semibold text-teal-700"
-                  onClick={() => router.push(`/chat?withUser=${b.customerId._id}`)}
-                >
-                  Chat
-                </button>
+                </div>
               </div>
-            </div>
-          ))}
-          {bookings.length === 0 && <p className="text-sm text-ink/50">No bookings yet.</p>}
+            ))}
+          {bookings.filter((b) => !TERMINAL_STATUS.includes(b.status)).length === 0 && (
+            <p className="text-sm text-ink/50">No active bookings right now.</p>
+          )}
+        </section>
+      )}
+
+      {tab === "History" && (
+        <section className="mt-6 space-y-3">
+          {bookings
+            .filter((b) => TERMINAL_STATUS.includes(b.status))
+            .map((b) => (
+              <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-display font-bold text-ink">
+                    #{b.orderSerial} · {b.customerId.name}
+                  </p>
+                  <p className="text-sm text-ink/60">
+                    {b.services.join(", ")} → {b.pickupAddress}
+                  </p>
+                  {b.deliveryManId && <p className="text-xs text-ink/45">Delivery-man: {b.deliveryManId.name}</p>}
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${
+                    b.status === "received" ? "bg-teal-100 text-teal-700" : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {b.status}
+                </span>
+              </div>
+            ))}
+          {bookings.filter((b) => TERMINAL_STATUS.includes(b.status)).length === 0 && (
+            <p className="text-sm text-ink/50">No completed or cancelled orders yet.</p>
+          )}
         </section>
       )}
 

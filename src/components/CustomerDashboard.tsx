@@ -27,7 +27,11 @@ type Booking = {
   createdAt: string;
 };
 
-const TABS = ["Browse", "My Bookings", "Favorites"] as const;
+const TABS = ["Browse", "My Bookings", "Favorites", "History"] as const;
+
+// Terminal states — an order that reaches any of these moves out of
+// "My Bookings" into "History".
+const TERMINAL_STATUS = ["received", "cancelled", "rejected"];
 
 export default function CustomerDashboard() {
   const router = useRouter();
@@ -76,6 +80,15 @@ export default function CustomerDashboard() {
     loadFavorites();
     loadAreas();
   }, []);
+
+  async function confirmReceived(bookingId: string) {
+    await fetch(`/api/bookings/${bookingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "received" }),
+    });
+    loadBookings();
+  }
 
   async function toggleFavorite(laundryId: string, isFav: boolean) {
     await fetch("/api/favorites", {
@@ -236,30 +249,70 @@ export default function CustomerDashboard() {
 
       {tab === "My Bookings" && (
         <section className="mt-6 space-y-3">
-          {bookings.map((b) => (
-            <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-display font-bold text-ink">
-                  #{b.orderSerial} · {b.laundryId?.laundryName || b.laundryId?.name}
-                </p>
-                <p className="text-sm text-ink/60">
-                  {b.services.join(", ")} → {b.pickupAddress}
-                </p>
-                {b.deliveryManId && (
-                  <p className="text-xs text-ink/45">Delivery-man: {b.deliveryManId.name}</p>
-                )}
+          {bookings
+            .filter((b) => !TERMINAL_STATUS.includes(b.status))
+            .map((b) => (
+              <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-display font-bold text-ink">
+                    #{b.orderSerial} · {b.laundryId?.laundryName || b.laundryId?.name}
+                  </p>
+                  <p className="text-sm text-ink/60">
+                    {b.services.join(", ")} → {b.pickupAddress}
+                  </p>
+                  {b.deliveryManId && (
+                    <p className="text-xs text-ink/45">Delivery-man: {b.deliveryManId.name}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={b.status} />
+                  {b.status === "delivered" && (
+                    <button
+                      className="btn-primary !px-3 !py-1.5 text-xs"
+                      onClick={() => confirmReceived(b._id)}
+                    >
+                      Received
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={b.status} />
-                {b.status === "delivered" && (
-                  <button className="btn-secondary !px-3 !py-1.5 text-xs" onClick={() => setRateBooking(b)}>
-                    Rate order
-                  </button>
-                )}
+            ))}
+          {bookings.filter((b) => !TERMINAL_STATUS.includes(b.status)).length === 0 && (
+            <p className="text-sm text-ink/50">No active bookings — browse a laundry to get started.</p>
+          )}
+        </section>
+      )}
+
+      {tab === "History" && (
+        <section className="mt-6 space-y-3">
+          {bookings
+            .filter((b) => TERMINAL_STATUS.includes(b.status))
+            .map((b) => (
+              <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-display font-bold text-ink">
+                    #{b.orderSerial} · {b.laundryId?.laundryName || b.laundryId?.name}
+                  </p>
+                  <p className="text-sm text-ink/60">
+                    {b.services.join(", ")} → {b.pickupAddress}
+                  </p>
+                  {b.deliveryManId && (
+                    <p className="text-xs text-ink/45">Delivery-man: {b.deliveryManId.name}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={b.status} />
+                  {b.status === "received" && (
+                    <button className="btn-secondary !px-3 !py-1.5 text-xs" onClick={() => setRateBooking(b)}>
+                      Rate order
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-          {bookings.length === 0 && <p className="text-sm text-ink/50">No bookings yet — browse a laundry to get started.</p>}
+            ))}
+          {bookings.filter((b) => TERMINAL_STATUS.includes(b.status)).length === 0 && (
+            <p className="text-sm text-ink/50">No completed or cancelled orders yet.</p>
+          )}
         </section>
       )}
 
@@ -325,7 +378,8 @@ function StatusBadge({ status }: { status: string }) {
     picked_up: "bg-blue-100 text-blue-700",
     in_progress: "bg-blue-100 text-blue-700",
     ready: "bg-citrus-500/15 text-citrus-600",
-    delivered: "bg-teal-100 text-teal-700",
+    delivered: "bg-citrus-500/15 text-citrus-600",
+    received: "bg-teal-100 text-teal-700",
     cancelled: "bg-red-100 text-red-700",
   };
   return (

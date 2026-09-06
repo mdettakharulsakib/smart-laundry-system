@@ -22,10 +22,14 @@ type Laundry = {
   ratingCount: number;
 };
 
+// The delivery-man's own actionable steps. "ready" is set by the laundry
+// (once washing is done), so there's no button for it here — the
+// delivery-man just waits during "in_progress" until the laundry marks
+// the order ready, then picks up the "delivered" action from there.
 const NEXT_STATUS: Record<string, string | null> = {
   accepted: "picked_up",
   picked_up: "in_progress",
-  in_progress: "ready",
+  in_progress: null,
   ready: "delivered",
 };
 
@@ -210,6 +214,12 @@ export default function DeliveryDashboard() {
                     <button className="btn-primary !px-3 !py-1.5 text-xs" onClick={() => advance(b._id, next)}>
                       Mark {next.replace("_", " ")}
                     </button>
+                  )}
+                  {b.status === "in_progress" && (
+                    <span className="text-xs text-ink/45">Waiting for laundry to finish washing</span>
+                  )}
+                  {b.status === "delivered" && (
+                    <span className="text-xs text-ink/45">Delivered — waiting for customer to confirm</span>
                   )}
                 </div>
               </div>

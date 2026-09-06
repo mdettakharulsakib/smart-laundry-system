@@ -52,6 +52,11 @@ export async function POST(req: NextRequest) {
       passwordHash,
       laundryName: data.laundryName,
       servicesOffered: data.servicesOffered ?? ["Washing", "Ironing"],
+      // Auto-verify delivery-men on signup: there's no admin review screen
+      // in this project yet, so leaving `verified: false` (the schema
+      // default) would mean no delivery-man could ever be appointed to a
+      // job. If an admin-verification flow is added later, remove this.
+      verified: data.role === "delivery" ? true : undefined,
     });
 
     const token = signToken({
