@@ -34,9 +34,16 @@ export async function POST(req: NextRequest) {
   await dbConnect();
 
   // Only allow rating for a booking the customer actually owns and that's completed
-  const booking = await Booking.findOne({ _id: data.bookingId, customerId: session.userId });
+  const booking = await Booking.findOne({
+    _id: data.bookingId,
+    customerId: session.userId,
+    status: "delivered",
+  });
   if (!booking) {
-    return NextResponse.json({ error: "Booking not found for this customer" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Booking not found, not yours, or not yet delivered" },
+      { status: 404 }
+    );
   }
 
   try {

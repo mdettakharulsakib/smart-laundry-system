@@ -14,6 +14,15 @@ const ALLOWED_STATUS = [
   "cancelled",
 ];
 
+// Which statuses each role is allowed to set. Prevents e.g. a customer
+// marking their own booking "delivered", or a delivery-man "accepting"
+// a booking that isn't theirs to approve.
+const ROLE_ALLOWED_STATUS: Record<"laundry" | "delivery" | "customer", string[]> = {
+  laundry: ["accepted", "rejected", "cancelled"],
+  delivery: ["picked_up", "in_progress", "ready", "delivered"],
+  customer: ["cancelled"],
+};
+
 /**
  * Laundry manages incoming booked services: approve, cancel, reschedule.
  * (Common Workflow, "Laundry ... manage incoming booked service from Customer")
@@ -40,6 +49,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.status) {
     if (!ALLOWED_STATUS.includes(body.status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+    const allowedForRole = ROLE_ALLOWED_STATUS[session.role];
+    if (!allowedForRole.includes(body.status)) {
+      return NextResponse.json(
+        { error: `${session.role} accounts cannot set status to "${body.status}"` },
+        { status: 403 }
+      );
     }
     booking.status = body.status;
   }
