@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Conversation from "@/models/Conversation";
+import User from "@/models/User";
 import { getCurrentUser } from "@/lib/auth";
 
 /**
@@ -45,6 +46,20 @@ export async function POST(req: NextRequest) {
       participants: { $all: allParticipants, $size: allParticipants.length },
     });
     if (existing) return NextResponse.json({ conversation: existing });
+  }
+
+  // Module 1: "a customer needs the laundry to be online to start a
+  // direct chat" — the Browse tab already disables the Chat button for
+  // offline laundries, but that's only a UI nicety; enforce it here too
+  // so the rule holds even if this endpoint is called directly. Only
+  // gates brand-new customer -> laundry conversations (handled above),
+  // not group chats or continuing an existing thread.
+  if (session.role === "customer" && !isGroup) {
+    const otherId = allParticipants.find((id) => id !== session.userId);
+    const other = await User.findById(otherId).select("role isOnline");
+    if (other?.role === "laundry" && !other.isOnline) {
+      return NextResponse.json({ error: "This laundry is currently offline" }, { status: 403 });
+    }
   }
 
   const conversation = await Conversation.create({

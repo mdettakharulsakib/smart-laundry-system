@@ -13,9 +13,22 @@ const createSchema = z.object({
   notes: z.string().optional(),
 });
 
-async function nextOrderSerial() {
+// orderSerial has a unique index, but countDocuments()-based numbering has
+// a race: two bookings created at nearly the same instant can both read
+// the same count and collide on the same serial. Rather than let that
+// surface as a raw 500, retry a few times with the next number along —
+// collisions are rare and this keeps the human-readable SLS-00001 format.
+async function createBookingWithSerial(payload: Record<string, unknown>, attempt = 0): Promise<any> {
   const count = await Booking.countDocuments();
-  return `SLS-${String(count + 1).padStart(5, "0")}`;
+  const orderSerial = `SLS-${String(count + 1 + attempt).padStart(5, "0")}`;
+  try {
+    return await Booking.create({ ...payload, orderSerial });
+  } catch (err: any) {
+    if (err.code === 11000 && attempt < 5) {
+      return createBookingWithSerial(payload, attempt + 1);
+    }
+    throw err;
+  }
 }
 
 // Customer creates a booking (Common Workflow: Service booking)
@@ -40,8 +53,7 @@ export async function POST(req: NextRequest) {
 
   const isVipOrder = laundry.vipEnabled && laundry.vipCustomerIds?.some((id: any) => id.toString() === session.userId);
 
-  const booking = await Booking.create({
-    orderSerial: await nextOrderSerial(),
+  const booking = await createBookingWithSerial({
     customerId: session.userId,
     laundryId: laundry._id,
     services: parsed.data.services,

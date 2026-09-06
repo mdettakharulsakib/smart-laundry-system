@@ -30,6 +30,23 @@ const ROLE_ALLOWED_STATUS: Record<"laundry" | "delivery" | "customer", string[]>
   customer: ["cancelled", "received"],
 };
 
+// Which CURRENT status a booking must be in before it can move to a given
+// next status — independent of who's asking. ROLE_ALLOWED_STATUS above
+// only checks "is this role even allowed to set this status ever"; this
+// map additionally stops nonsensical jumps like pending -> ready, or
+// cancelling an order that's already been delivered.
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  pending: ["accepted", "rejected", "cancelled"],
+  accepted: ["picked_up", "cancelled"],
+  picked_up: ["in_progress", "cancelled"],
+  in_progress: ["ready", "cancelled"],
+  ready: ["delivered", "cancelled"],
+  delivered: ["received"],
+  received: [],
+  rejected: [],
+  cancelled: [],
+};
+
 /**
  * Laundry manages incoming booked services: approve, cancel, reschedule.
  * (Common Workflow, "Laundry ... manage incoming booked service from Customer")
@@ -65,10 +82,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       );
     }
     // Customer can only confirm receipt once the delivery-man has actually
-    // marked the order delivered — prevents skipping straight to "received".
-    if (body.status === "received" && booking.status !== "delivered") {
+    // marked the order delivered — and more generally, every status change
+    // must be a valid next step from wherever the booking currently is
+    // (e.g. you can't cancel something already delivered, or mark "ready"
+    // on an order that hasn't even been picked up yet).
+    const allowedNext = VALID_TRANSITIONS[booking.status] ?? [];
+    if (!allowedNext.includes(body.status)) {
       return NextResponse.json(
-        { error: "You can only confirm receipt after the order has been delivered" },
+        { error: `Cannot change status from "${booking.status}" to "${body.status}"` },
         { status: 400 }
       );
     }
