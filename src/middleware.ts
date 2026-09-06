@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserFromRequest } from "@/lib/auth";
+import { getUserFromRequestEdge } from "@/lib/auth-edge";
 
 const roleHome: Record<string, string> = {
   customer: "/dashboard/customer",
@@ -7,9 +7,9 @@ const roleHome: Record<string, string> = {
   delivery: "/dashboard/delivery",
 };
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const user = getUserFromRequest(req);
+  const user = await getUserFromRequestEdge(req);
 
   if (pathname.startsWith("/dashboard")) {
     if (!user) {

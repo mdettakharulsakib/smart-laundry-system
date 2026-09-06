@@ -33,7 +33,6 @@ export default function Navbar({
 
           {user ? (
             <>
-              {user.role === "laundry" && <NavButton href="/dashboard/laundry">VIP</NavButton>}
               {user.role === "customer" && <NavButton href="/chat">Chat</NavButton>}
               <button
                 onClick={handleLogout}

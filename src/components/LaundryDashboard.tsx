@@ -19,13 +19,16 @@ type DeliveryMan = {
   phone: string;
   location: string;
   ratingAvg: number;
+  isOnline: boolean;
 };
 
 const TABS = ["Incoming Bookings", "Job Feed", "Settings"] as const;
 
 export default function LaundryDashboard() {
   const router = useRouter();
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Incoming Bookings");
+  // Laundry accounts land directly on the Job Feed — the delivery-person
+  // roster with contact info and live status — per the required flow.
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Job Feed");
   const [isOnline, setIsOnline] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [openJobs, setOpenJobs] = useState<Booking[]>([]);
@@ -236,21 +239,49 @@ export default function LaundryDashboard() {
 
           <div>
             <h2 className="font-display text-lg font-bold text-ink">Available delivery-men</h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {deliveryMen.map((d) => (
-                <div key={d._id} className="card">
-                  <p className="font-semibold text-ink">{d.name}</p>
-                  <p className="text-sm text-ink/60">{d.location}</p>
-                  <p className="mt-1 text-xs text-ink/45">★ {d.ratingAvg?.toFixed(1) ?? "0.0"}</p>
-                  <button
-                    className="btn-secondary mt-3 w-full !py-2 text-xs"
-                    onClick={() => appointDeliveryMan(d._id, "")}
-                  >
-                    Appoint to my center
-                  </button>
-                </div>
-              ))}
-              {deliveryMen.length === 0 && <p className="text-sm text-ink/50">No verified delivery-men available yet.</p>}
+            <p className="mt-1 text-sm text-ink/50">Roster of verified delivery-men, with contact and live status.</p>
+            <div className="mt-3 overflow-hidden rounded-lg border border-line">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-suds text-xs uppercase tracking-wide text-ink/50">
+                  <tr>
+                    <th className="px-4 py-2.5">Name</th>
+                    <th className="px-4 py-2.5">Phone</th>
+                    <th className="px-4 py-2.5">Status</th>
+                    <th className="px-4 py-2.5">Rating</th>
+                    <th className="px-4 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {deliveryMen.map((d) => (
+                    <tr key={d._id} className="border-t border-line">
+                      <td className="px-4 py-2.5 font-semibold text-ink">{d.name}</td>
+                      <td className="px-4 py-2.5 text-ink/70">{d.phone}</td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                            d.isOnline ? "bg-teal-100 text-teal-700" : "bg-ink/5 text-ink/50"
+                          }`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${d.isOnline ? "bg-teal-600" : "bg-ink/30"}`} />
+                          {d.isOnline ? "Online" : "Offline"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-ink/60">★ {d.ratingAvg?.toFixed(1) ?? "0.0"}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          className="btn-secondary !px-3 !py-1.5 text-xs"
+                          onClick={() => appointDeliveryMan(d._id, "")}
+                        >
+                          Appoint
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {deliveryMen.length === 0 && (
+                <p className="px-4 py-6 text-center text-sm text-ink/50">No verified delivery-men available yet.</p>
+              )}
             </div>
           </div>
         </section>

@@ -12,6 +12,16 @@ type Booking = {
   laundryId: { name: string; laundryName?: string; location: string };
 };
 
+type Laundry = {
+  _id: string;
+  laundryName?: string;
+  location: string;
+  isOnline: boolean;
+  servicesOffered: string[];
+  ratingAvg: number;
+  ratingCount: number;
+};
+
 const NEXT_STATUS: Record<string, string | null> = {
   accepted: "picked_up",
   picked_up: "in_progress",
@@ -19,60 +29,195 @@ const NEXT_STATUS: Record<string, string | null> = {
   ready: "delivered",
 };
 
-export default function DeliveryDashboard() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
+const TABS = ["Available Laundry Shops", "Job Feed"] as const;
 
-  async function load() {
+/**
+ * Delivery-man dashboard.
+ * - Lands on "Available Laundry Shops" (same nearby/area text-search as
+ *   the customer's Browse tab), so a delivery-man can see who's operating.
+ * - "Job Feed" is their own assigned deliveries — no VIP anywhere here,
+ *   VIP membership is a customer↔laundry feature only.
+ */
+export default function DeliveryDashboard() {
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Available Laundry Shops");
+  const [isOnline, setIsOnline] = useState(false);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [laundries, setLaundries] = useState<Laundry[]>([]);
+  const [query, setQuery] = useState("");
+  const [area, setArea] = useState("");
+  const [areas, setAreas] = useState<string[]>([]);
+
+  async function loadAvailability() {
+    const res = await fetch("/api/delivery/availability");
+    const data = await res.json();
+    setIsOnline(data.isOnline ?? false);
+  }
+  async function toggleAvailability() {
+    const next = !isOnline;
+    setIsOnline(next);
+    await fetch("/api/delivery/availability", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isOnline: next }),
+    });
+  }
+
+  async function loadBookings() {
     const res = await fetch("/api/bookings");
     const data = await res.json();
     setBookings(data.bookings ?? []);
   }
-
-  useEffect(() => {
-    load();
-  }, []);
-
   async function advance(bookingId: string, status: string) {
     await fetch(`/api/bookings/${bookingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    load();
+    loadBookings();
   }
+
+  async function loadLaundries(q = query, a = area) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (a) params.set("area", a);
+    const res = await fetch(`/api/laundries${params.toString() ? `?${params.toString()}` : ""}`);
+    const data = await res.json();
+    setLaundries(data.laundries ?? []);
+  }
+  async function loadAreas() {
+    const res = await fetch("/api/laundries/areas");
+    const data = await res.json();
+    setAreas(data.areas ?? []);
+  }
+
+  useEffect(() => {
+    loadAvailability();
+    loadBookings();
+    loadLaundries();
+    loadAreas();
+  }, []);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="font-display text-3xl font-bold text-ink">Your deliveries</h1>
-      <p className="mt-1 text-ink/60">Jobs assigned to you by laundry centers.</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-bold text-ink">Delivery dashboard</h1>
+          <p className="mt-1 text-ink/60">See laundry shops nearby, and manage jobs assigned to you.</p>
+        </div>
 
-      <section className="mt-6 space-y-3">
-        {bookings.map((b) => {
-          const next = NEXT_STATUS[b.status];
-          return (
-            <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-display font-bold text-ink">#{b.orderSerial}</p>
-                <p className="text-sm text-ink/60">
-                  Pickup: {b.pickupAddress} · From: {b.laundryId?.laundryName || b.laundryId?.name}
+        <button
+          onClick={toggleAvailability}
+          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+            isOnline ? "border-teal-600 bg-teal-600 text-white" : "border-line bg-white text-ink/60"
+          }`}
+        >
+          <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-white" : "bg-ink/30"}`} />
+          {isOnline ? "Online — visible to laundries" : "Offline"}
+        </button>
+      </div>
+
+      <div className="mt-6 flex gap-2 border-b border-line">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+              tab === t ? "border-teal-600 text-teal-700" : "border-transparent text-ink/50 hover:text-ink"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === "Available Laundry Shops" && (
+        <section className="mt-6">
+          <div className="flex flex-wrap gap-2">
+            <input
+              className="input max-w-sm"
+              placeholder="Search by laundry name…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && loadLaundries(query, area)}
+            />
+            <select
+              className="input !w-auto max-w-[220px]"
+              value={area}
+              onChange={(e) => {
+                setArea(e.target.value);
+                loadLaundries(query, e.target.value);
+              }}
+            >
+              <option value="">Nearby: all areas</option>
+              {areas.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+            <button className="btn-secondary !px-5 !py-2.5" onClick={() => loadLaundries(query, area)}>
+              Search
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {laundries.map((l) => (
+              <div key={l._id} className="card">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-display font-bold text-ink">{l.laundryName}</p>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      l.isOnline ? "bg-teal-100 text-teal-700" : "bg-ink/5 text-ink/50"
+                    }`}
+                  >
+                    {l.isOnline ? "Online" : "Offline"}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-ink/60">{l.location}</p>
+                <p className="mt-1 text-xs text-ink/45">
+                  {l.servicesOffered?.join(", ") || "No services listed"}
                 </p>
-                <p className="text-xs text-ink/45">Customer: {b.customerId?.name} · {b.customerId?.phone}</p>
+                <p className="mt-2 text-xs text-ink/50">
+                  ★ {l.ratingAvg?.toFixed(1) ?? "0.0"} ({l.ratingCount ?? 0} reviews)
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-suds px-2.5 py-1 text-[11px] font-semibold capitalize text-ink/70">
-                  {b.status.replace("_", " ")}
-                </span>
-                {next && (
-                  <button className="btn-primary !px-3 !py-1.5 text-xs" onClick={() => advance(b._id, next)}>
-                    Mark {next.replace("_", " ")}
-                  </button>
-                )}
+            ))}
+            {laundries.length === 0 && <p className="text-sm text-ink/50">No laundries found.</p>}
+          </div>
+        </section>
+      )}
+
+      {tab === "Job Feed" && (
+        <section className="mt-6 space-y-3">
+          {bookings.map((b) => {
+            const next = NEXT_STATUS[b.status];
+            return (
+              <div key={b._id} className="card flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-display font-bold text-ink">#{b.orderSerial}</p>
+                  <p className="text-sm text-ink/60">
+                    Pickup: {b.pickupAddress} · From: {b.laundryId?.laundryName || b.laundryId?.name}
+                  </p>
+                  <p className="text-xs text-ink/45">
+                    Customer: {b.customerId?.name} · {b.customerId?.phone}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-suds px-2.5 py-1 text-[11px] font-semibold capitalize text-ink/70">
+                    {b.status.replace("_", " ")}
+                  </span>
+                  {next && (
+                    <button className="btn-primary !px-3 !py-1.5 text-xs" onClick={() => advance(b._id, next)}>
+                      Mark {next.replace("_", " ")}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
-        {bookings.length === 0 && <p className="text-sm text-ink/50">No deliveries assigned yet.</p>}
-      </section>
+            );
+          })}
+          {bookings.length === 0 && <p className="text-sm text-ink/50">No deliveries assigned yet.</p>}
+        </section>
+      )}
     </main>
   );
 }

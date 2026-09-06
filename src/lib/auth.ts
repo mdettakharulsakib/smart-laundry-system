@@ -1,10 +1,11 @@
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
+import { AUTH_COOKIE } from "@/lib/authConstants";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
-export const AUTH_COOKIE = "sls_token";
+export { AUTH_COOKIE };
 
 export type UserRole = "customer" | "laundry" | "delivery";
 

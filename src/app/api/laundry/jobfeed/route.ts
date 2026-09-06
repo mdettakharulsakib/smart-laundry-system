@@ -34,7 +34,7 @@ export async function GET() {
     role: "delivery",
     verified: true,
   })
-    .select("name phone location ratingAvg ratingCount assignedLaundryId")
+    .select("name phone location isOnline ratingAvg ratingCount assignedLaundryId")
     .lean();
 
   return NextResponse.json({ openJobs, availableDeliveryMen });
